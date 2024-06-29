@@ -14,6 +14,7 @@ let lines = [];
 let selectedPoint = null;
 let isDrawing = false;
 let currentPath = [];
+let newPointAllowed = false;
 
 canvas.addEventListener('mousedown', onMouseDown);
 canvas.addEventListener('mousemove', onMouseMove);
@@ -34,6 +35,7 @@ function drawPoints() {
 
 function drawLines() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 5;
     for (let line of lines) {
         ctx.beginPath();
         ctx.moveTo(line[0].x, line[0].y);
@@ -48,12 +50,29 @@ function drawLines() {
 
 function onMouseDown(e) {
     const { offsetX, offsetY } = e;
-    for (let point of points) {
-        if (Math.hypot(point.x - offsetX, point.y - offsetY) < 20 && point.connections < 3) {
-            selectedPoint = point;
-            isDrawing = true;
-            currentPath = [{ x: offsetX, y: offsetY }];
-            break;
+    if (newPointAllowed) {
+        // Si se permite crear un nuevo punto
+        for (let line of lines) {
+            for (let i = 0; i < line.length - 1; i++) {
+                const distance = pointToSegmentDistance({ x: offsetX, y: offsetY }, line[i], line[i + 1]);
+                if (distance < 5) {
+                    const newPoint = { x: offsetX, y: offsetY, id: generateNewId(), color: generateRandomColor(), connections: 0 };
+                    points.push(newPoint);
+                    drawLines();
+                    newPointAllowed = false;
+                    return;
+                }
+            }
+        }
+    } else {
+        // Selecciona un punto existente para empezar a dibujar una línea
+        for (let point of points) {
+            if (Math.hypot(point.x - offsetX, point.y - offsetY) < 20 && point.connections < 3) {
+                selectedPoint = point;
+                isDrawing = true;
+                currentPath = [{ x: offsetX, y: offsetY }];
+                break;
+            }
         }
     }
 }
@@ -71,13 +90,14 @@ function onMouseUp(e) {
     if (isDrawing && selectedPoint) {
         const { offsetX, offsetY } = e;
         for (let point of points) {
-            if (Math.hypot(point.x - offsetX, point.y - offsetY) < 20 && point !== selectedPoint && point.id === selectedPoint.id && point.connections < 3) {
+            if (Math.hypot(point.x - offsetX, point.y - offsetY) < 20 && point !== selectedPoint && point.connections < 3) {
                 currentPath.push({ x: point.x, y: point.y });
                 const newLine = currentPath;
                 if (!checkLineIntersection(newLine)) {
                     lines.push(newLine);
                     selectedPoint.connections += 1;
                     point.connections += 1;
+                    newPointAllowed = true;
                 }
                 break;
             }
@@ -110,7 +130,6 @@ function checkLineIntersection(newLine) {
 }
 
 function linesIntersect(line1, line2) {
-    // Aquí se realiza una verificación simple por segmentos para detectar cruces.
     for (let i = 0; i < line1.length - 1; i++) {
         for (let j = 0; j < line2.length - 1; j++) {
             if (segmentsIntersect(line1[i], line1[i + 1], line2[j], line2[j + 1])) {
@@ -126,6 +145,28 @@ function segmentsIntersect(p1, p2, p3, p4) {
         return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
     }
     return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+
+function pointToSegmentDistance(point, v, w) {
+    const l2 = (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
+    if (l2 === 0) return Math.hypot(point.x - v.x, point.y - v.y);
+    let t = ((point.x - v.x) * (w.x - v.x) + (point.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const projection = { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
+    return Math.hypot(point.x - projection.x, point.y - projection.y);
+}
+
+function generateNewId() {
+    return Math.floor(Math.random() * 9) + 1;
+}
+
+function generateRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
 }
 
 drawPoints();
